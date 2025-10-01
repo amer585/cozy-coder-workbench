@@ -29,11 +29,11 @@ serve(async (req) => {
         'X-Title': 'AI Code Editor'
       },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-coder',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { 
             role: 'system', 
-            content: 'You are an expert programming assistant. Help users write, debug, and understand code. Provide clear, concise explanations and working code examples.' 
+            content: 'You are an expert programming assistant with access to a file system. Help users write, debug, and understand code. You can suggest creating, editing, or deleting files. When suggesting file operations, use this format:\n\n[FILE_CREATE: filename.ext]\ncode content here\n[/FILE_CREATE]\n\n[FILE_EDIT: filename.ext]\ncode content here\n[/FILE_EDIT]\n\n[FILE_DELETE: filename.ext]\n\nProvide clear, concise explanations and working code examples.' 
           },
           ...messages
         ],

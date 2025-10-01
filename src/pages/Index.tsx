@@ -2,14 +2,27 @@ import { useState } from 'react';
 import { Chat } from '@/components/Chat';
 import { CodeEditor } from '@/components/CodeEditor';
 import { PreviewPane } from '@/components/PreviewPane';
+import { FileExplorer } from '@/components/FileExplorer';
 import { Code2, Sparkles } from 'lucide-react';
+import { useFileSystem } from '@/hooks/useFileSystem';
+import { toast } from '@/components/ui/use-toast';
 
 const Index = () => {
   const [output, setOutput] = useState<string[]>([]);
+  const {
+    files,
+    activeFileId,
+    setActiveFileId,
+    createFile,
+    updateFile,
+    deleteFile,
+    renameFile,
+    getActiveFile,
+    getAllFilesContext
+  } = useFileSystem();
 
   const handleRunCode = (code: string) => {
     try {
-      // Capture console.log output
       const logs: string[] = [];
       const originalLog = console.log;
       console.log = (...args: any[]) => {
@@ -19,17 +32,50 @@ const Index = () => {
         originalLog(...args);
       };
 
-      // Execute code
       eval(code);
-      
-      // Restore console.log
       console.log = originalLog;
       
       setOutput(logs.length > 0 ? logs : ['Code executed successfully (no output)']);
-    } catch (error) {
+    } catch (error: any) {
       setOutput([`Error: ${error.message}`]);
     }
   };
+
+  const handleFileOperation = (operation: string, fileName: string, content?: string) => {
+    switch (operation) {
+      case 'create':
+        if (content !== undefined) {
+          createFile(fileName, content);
+          toast({
+            title: "File Created",
+            description: `${fileName} has been created by AI`,
+          });
+        }
+        break;
+      case 'edit':
+        const existingFile = files.find(f => f.name === fileName);
+        if (existingFile && content !== undefined) {
+          updateFile(existingFile.id, { content });
+          toast({
+            title: "File Updated",
+            description: `${fileName} has been updated by AI`,
+          });
+        }
+        break;
+      case 'delete':
+        const fileToDelete = files.find(f => f.name === fileName);
+        if (fileToDelete) {
+          deleteFile(fileToDelete.id);
+          toast({
+            title: "File Deleted",
+            description: `${fileName} has been deleted by AI`,
+          });
+        }
+        break;
+    }
+  };
+
+  const activeFile = getActiveFile();
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -52,18 +98,41 @@ const Index = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
+        {/* File Explorer */}
+        <div className="w-[250px] flex-shrink-0">
+          <FileExplorer
+            files={files}
+            activeFileId={activeFileId}
+            onSelectFile={setActiveFileId}
+            onCreateFile={(name) => createFile(name)}
+            onDeleteFile={deleteFile}
+            onRenameFile={renameFile}
+          />
+        </div>
+
         {/* Chat Panel */}
-        <div className="w-[400px] flex-shrink-0">
-          <Chat />
+        <div className="w-[350px] flex-shrink-0">
+          <Chat 
+            filesContext={getAllFilesContext()}
+            onFileOperation={handleFileOperation}
+          />
         </div>
 
         {/* Code Editor */}
         <div className="flex-1">
-          <CodeEditor onRun={handleRunCode} />
+          <CodeEditor 
+            file={activeFile}
+            onRun={handleRunCode}
+            onUpdateFile={(content) => {
+              if (activeFile) {
+                updateFile(activeFile.id, { content });
+              }
+            }}
+          />
         </div>
 
         {/* Preview Panel */}
-        <div className="w-[400px] flex-shrink-0">
+        <div className="w-[350px] flex-shrink-0">
           <PreviewPane output={output} />
         </div>
       </div>

@@ -10,7 +10,12 @@ interface Message {
   content: string;
 }
 
-export const Chat = () => {
+interface ChatProps {
+  filesContext: string;
+  onFileOperation?: (operation: string, fileName: string, content?: string) => void;
+}
+
+export const Chat = ({ filesContext, onFileOperation }: ChatProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,33 +30,52 @@ export const Chat = () => {
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
+    // Include file context in the message
+    const contextualInput = `Current Files:\n${filesContext}\n\nUser Question: ${input}`;
     const userMessage: Message = { role: 'user', content: input };
+    const contextualMessage: Message = { role: 'user', content: contextualInput };
+    
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('ai-chat', {
-        body: { messages: [...messages, userMessage] }
-      });
+      const response = await fetch(
+        `https://ixyoxqaeesvhfijqaawr.supabase.co/functions/v1/ai-chat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+          },
+          body: JSON.stringify({
+            messages: [...messages.map(m => ({ role: m.role, content: m.content })), contextualMessage]
+          })
+        }
+      );
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error('Failed to get response');
+      }
 
-      // Handle streaming response
-      const reader = data.getReader();
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+      
       const decoder = new TextDecoder();
       let assistantMessage = '';
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const jsonStr = line.slice(6);
+            const jsonStr = line.slice(6).trim();
             if (jsonStr === '[DONE]') continue;
 
             try {
@@ -78,6 +102,25 @@ export const Chat = () => {
             }
           }
         }
+      }
+
+      // Process file operations from AI response
+      const fileCreateMatches = assistantMessage.matchAll(/\[FILE_CREATE: (.+?)\]\n([\s\S]*?)\[\/FILE_CREATE\]/g);
+      for (const match of fileCreateMatches) {
+        const [, fileName, content] = match;
+        onFileOperation?.('create', fileName.trim(), content.trim());
+      }
+
+      const fileEditMatches = assistantMessage.matchAll(/\[FILE_EDIT: (.+?)\]\n([\s\S]*?)\[\/FILE_EDIT\]/g);
+      for (const match of fileEditMatches) {
+        const [, fileName, content] = match;
+        onFileOperation?.('edit', fileName.trim(), content.trim());
+      }
+
+      const fileDeleteMatches = assistantMessage.matchAll(/\[FILE_DELETE: (.+?)\]/g);
+      for (const match of fileDeleteMatches) {
+        const [, fileName] = match;
+        onFileOperation?.('delete', fileName.trim());
       }
     } catch (error) {
       console.error('Error:', error);
