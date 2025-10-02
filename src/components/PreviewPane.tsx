@@ -45,7 +45,7 @@ export const PreviewPane = ({ htmlContent, consoleOutput }: PreviewPaneProps) =>
               ref={iframeRef}
               className="w-full h-full bg-white"
               title="preview"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-same-origin"
             />
           ) : (
             <div className="flex items-center justify-center h-full text-center text-muted-foreground">
