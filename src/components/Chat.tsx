@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Loader2, Code2 } from 'lucide-react';
+import { Send, Loader2, MessageSquarePlus, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/use-toast';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -133,45 +134,84 @@ export const Chat = ({ filesContext, onFileOperation }: ChatProps) => {
     }
   };
 
+  const handleNewChat = () => {
+    if (messages.length > 0) {
+      const confirmNew = window.confirm('Start a new chat? Current conversation will be cleared.');
+      if (!confirmNew) return;
+    }
+    setMessages([]);
+    setInput('');
+    toast({
+      title: "New Chat Started",
+      description: "Ready for a fresh conversation!",
+    });
+  };
+
   return (
-    <div className="flex flex-col h-full bg-[hsl(var(--editor-bg))] border-r border-border">
-      <div className="flex items-center gap-2 p-4 border-b border-border bg-gradient-to-r from-primary/10 to-transparent">
-        <Code2 className="w-5 h-5 text-primary" />
-        <h2 className="font-semibold text-foreground">AI Assistant</h2>
+    <div className="flex flex-col h-full bg-gradient-to-br from-background to-secondary/20">
+      <div className="flex items-center justify-between p-4 border-b border-border/50 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+          </div>
+          <h2 className="font-semibold text-foreground">AI Code Assistant</h2>
+        </div>
+        <Button
+          onClick={handleNewChat}
+          variant="ghost"
+          size="sm"
+          className="gap-2 hover:bg-primary/10 transition-all"
+        >
+          <MessageSquarePlus className="w-4 h-4" />
+          New Chat
+        </Button>
       </div>
 
       <ScrollArea className="flex-1 p-4" ref={scrollRef}>
         <div className="space-y-4">
           {messages.length === 0 && (
-            <div className="text-center text-muted-foreground py-8">
-              <Code2 className="w-12 h-12 mx-auto mb-4 text-primary/50" />
-              <p className="text-sm">Ask me anything about coding!</p>
+            <div className="text-center text-muted-foreground py-12 animate-fade-in">
+              <Sparkles className="w-16 h-16 mx-auto mb-4 text-primary/50 animate-pulse" />
+              <h3 className="text-lg font-semibold mb-2 text-foreground">Welcome to AI Code Assistant</h3>
+              <p className="text-sm mb-4">I can help you with:</p>
+              <div className="space-y-2 text-xs max-w-xs mx-auto text-left">
+                <div className="p-2 rounded bg-primary/5 border border-primary/10">• Writing and debugging code</div>
+                <div className="p-2 rounded bg-primary/5 border border-primary/10">• Creating and editing files</div>
+                <div className="p-2 rounded bg-primary/5 border border-primary/10">• Explaining complex concepts</div>
+                <div className="p-2 rounded bg-primary/5 border border-primary/10">• Suggesting best practices</div>
+              </div>
             </div>
           )}
           {messages.map((msg, idx) => (
             <div
               key={idx}
-              className={`p-3 rounded-lg ${
-                msg.role === 'user'
-                  ? 'bg-primary/20 ml-8 border border-primary/30'
-                  : 'bg-secondary mr-8'
+              className={`animate-fade-in ${
+                msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'
               }`}
             >
-              <pre className="whitespace-pre-wrap font-mono text-sm text-foreground">
-                {msg.content}
-              </pre>
+              <div
+                className={`p-3 rounded-lg max-w-[85%] ${
+                  msg.role === 'user'
+                    ? 'bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/30 shadow-sm'
+                    : 'bg-secondary/80 backdrop-blur-sm border border-border/50'
+                }`}
+              >
+                <pre className="whitespace-pre-wrap font-mono text-sm text-foreground leading-relaxed">
+                  {msg.content}
+                </pre>
+              </div>
             </div>
           ))}
           {isLoading && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Thinking...</span>
+            <div className="flex items-center gap-2 text-muted-foreground p-3 rounded-lg bg-secondary/50 w-fit animate-fade-in">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span className="text-sm">AI is thinking deeply...</span>
             </div>
           )}
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t border-border bg-card/50">
+      <div className="p-4 border-t border-border/50 bg-gradient-to-t from-card/80 to-transparent backdrop-blur-sm">
         <div className="flex gap-2">
           <Textarea
             value={input}
@@ -182,23 +222,26 @@ export const Chat = ({ filesContext, onFileOperation }: ChatProps) => {
                 sendMessage();
               }
             }}
-            placeholder="Ask about code, debug, or get help..."
-            className="min-h-[60px] bg-input border-border resize-none"
+            placeholder="Ask me to create files, debug code, or explain concepts..."
+            className="min-h-[80px] bg-input/90 border-border/50 resize-none focus:ring-2 focus:ring-primary/20 transition-all"
             disabled={isLoading}
           />
           <Button
             onClick={sendMessage}
             disabled={isLoading || !input.trim()}
             size="icon"
-            className="h-[60px] w-[60px] bg-gradient-to-br from-primary to-primary-glow hover:shadow-glow transition-all"
+            className="h-[80px] w-[80px] bg-gradient-to-br from-primary via-primary-glow to-primary hover:shadow-glow hover:scale-105 transition-all duration-300"
           >
             {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="w-6 h-6 animate-spin" />
             ) : (
-              <Send className="w-5 h-5" />
+              <Send className="w-6 h-6" />
             )}
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          Press Enter to send • Shift+Enter for new line
+        </p>
       </div>
     </div>
   );

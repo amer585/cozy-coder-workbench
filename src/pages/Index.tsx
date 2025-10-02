@@ -3,9 +3,10 @@ import { Chat } from '@/components/Chat';
 import { CodeEditor } from '@/components/CodeEditor';
 import { PreviewPane } from '@/components/PreviewPane';
 import { FileExplorer } from '@/components/FileExplorer';
-import { Code2, Sparkles } from 'lucide-react';
+import { Code2, Sparkles, FileCode, Globe, MessageSquare } from 'lucide-react';
 import { useFileSystem } from '@/hooks/useFileSystem';
 import { toast } from '@/components/ui/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Index = () => {
   const [output, setOutput] = useState<string[]>([]);
@@ -155,7 +156,7 @@ const Index = () => {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* File Explorer */}
-        <div className="w-[250px] flex-shrink-0">
+        <div className="w-[250px] flex-shrink-0 border-r border-border/50">
           <FileExplorer
             files={files}
             activeFileId={activeFileId}
@@ -166,29 +167,46 @@ const Index = () => {
           />
         </div>
 
-        {/* Chat Panel */}
-        <div className="w-[350px] flex-shrink-0">
-          <Chat 
-            filesContext={getAllFilesContext()}
-            onFileOperation={handleFileOperation}
-          />
-        </div>
+        {/* Main Workspace with Tabs */}
+        <div className="flex-1 flex flex-col">
+          <Tabs defaultValue="editor" className="flex-1 flex flex-col">
+            <TabsList className="w-full justify-start rounded-none border-b border-border/50 bg-secondary/30 h-12 px-4">
+              <TabsTrigger value="editor" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <FileCode className="w-4 h-4" />
+                Code Editor
+              </TabsTrigger>
+              <TabsTrigger value="preview" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <Globe className="w-4 h-4" />
+                Preview
+              </TabsTrigger>
+              <TabsTrigger value="chat" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <MessageSquare className="w-4 h-4" />
+                AI Assistant
+              </TabsTrigger>
+            </TabsList>
 
-        {/* Code Editor */}
-        <div className="flex-1">
-          <CodeEditor 
-            file={activeFile}
-            onUpdateFile={(content) => {
-              if (activeFile) {
-                updateFile(activeFile.id, { content });
-              }
-            }}
-          />
-        </div>
+            <TabsContent value="editor" className="flex-1 m-0">
+              <CodeEditor 
+                file={activeFile}
+                onUpdateFile={(content) => {
+                  if (activeFile) {
+                    updateFile(activeFile.id, { content });
+                  }
+                }}
+              />
+            </TabsContent>
 
-        {/* Preview Panel */}
-        <div className="w-[350px] flex-shrink-0">
-          <PreviewPane htmlContent={previewHtml} consoleOutput={output} />
+            <TabsContent value="preview" className="flex-1 m-0">
+              <PreviewPane htmlContent={previewHtml} consoleOutput={output} />
+            </TabsContent>
+
+            <TabsContent value="chat" className="flex-1 m-0">
+              <Chat 
+                filesContext={getAllFilesContext()}
+                onFileOperation={handleFileOperation}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
