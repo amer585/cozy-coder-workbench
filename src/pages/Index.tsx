@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Chat } from '@/components/Chat';
 import { CodeEditor } from '@/components/CodeEditor';
 import { PreviewPane } from '@/components/PreviewPane';
@@ -9,6 +9,8 @@ import { toast } from '@/components/ui/use-toast';
 
 const Index = () => {
   const [output, setOutput] = useState<string[]>([]);
+  const [previewHtml, setPreviewHtml] = useState('');
+  
   const {
     files,
     activeFileId,
@@ -21,8 +23,49 @@ const Index = () => {
     getAllFilesContext
   } = useFileSystem();
 
-  const handleRunCode = (code: string) => {
-    try {
+  // Auto-run and generate preview whenever files change
+  useEffect(() => {
+    const htmlFile = files.find(f => f.name.endsWith('.html'));
+    const cssFiles = files.filter(f => f.name.endsWith('.css'));
+    const jsFiles = files.filter(f => f.name.endsWith('.js'));
+
+    if (htmlFile) {
+      let html = htmlFile.content;
+      
+      // Inject CSS
+      if (cssFiles.length > 0) {
+        const cssContent = cssFiles.map(f => f.content).join('\n');
+        html = html.replace('</head>', `<style>${cssContent}</style></head>`);
+      }
+      
+      // Inject JS with console capture
+      if (jsFiles.length > 0) {
+        const jsContent = jsFiles.map(f => f.content).join('\n');
+        const wrappedJs = `
+          <script>
+            const logs = [];
+            const originalLog = console.log;
+            console.log = (...args) => {
+              logs.push(args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+              ).join(' '));
+              originalLog(...args);
+              window.parent.postMessage({ type: 'console', logs }, '*');
+            };
+            
+            try {
+              ${jsContent}
+            } catch (error) {
+              console.log('Error: ' + error.message);
+            }
+          </script>
+        `;
+        html = html.replace('</body>', `${wrappedJs}</body>`);
+      }
+      
+      setPreviewHtml(html);
+    } else if (jsFiles.length > 0) {
+      // Run pure JS files
       const logs: string[] = [];
       const originalLog = console.log;
       console.log = (...args: any[]) => {
@@ -32,14 +75,27 @@ const Index = () => {
         originalLog(...args);
       };
 
-      eval(code);
-      console.log = originalLog;
+      try {
+        jsFiles.forEach(f => eval(f.content));
+        setOutput(logs.length > 0 ? logs : ['Code executed successfully']);
+      } catch (error: any) {
+        setOutput([`Error: ${error.message}`]);
+      }
       
-      setOutput(logs.length > 0 ? logs : ['Code executed successfully (no output)']);
-    } catch (error: any) {
-      setOutput([`Error: ${error.message}`]);
+      console.log = originalLog;
     }
-  };
+  }, [files]);
+
+  // Listen for console messages from iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'console') {
+        setOutput(event.data.logs);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const handleFileOperation = (operation: string, fileName: string, content?: string) => {
     switch (operation) {
@@ -122,7 +178,6 @@ const Index = () => {
         <div className="flex-1">
           <CodeEditor 
             file={activeFile}
-            onRun={handleRunCode}
             onUpdateFile={(content) => {
               if (activeFile) {
                 updateFile(activeFile.id, { content });
@@ -133,7 +188,7 @@ const Index = () => {
 
         {/* Preview Panel */}
         <div className="w-[350px] flex-shrink-0">
-          <PreviewPane output={output} />
+          <PreviewPane htmlContent={previewHtml} consoleOutput={output} />
         </div>
       </div>
     </div>
