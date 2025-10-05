@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageSquare, Plus, Trash2, Download, AlertCircle, Upload } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, Download, CircleAlert as AlertCircle, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { importConversation, type ExportedConversation } from '@/lib/conversationImport';

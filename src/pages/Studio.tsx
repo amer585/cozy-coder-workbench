@@ -4,7 +4,7 @@ import { CodeEditor } from '@/components/CodeEditor';
 import { PreviewPane } from '@/components/PreviewPane';
 import { CollapsibleFileExplorer } from '@/components/CollapsibleFileExplorer';
 import { ChatHistory } from '@/components/ChatHistory';
-import { Code2, Sparkles, FileCode, Globe, MessageSquare } from 'lucide-react';
+import { Code as Code2, Sparkles, FileCode, Globe, MessageSquare } from 'lucide-react';
 import { useFileSystem } from '@/hooks/useFileSystem';
 import { toast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
