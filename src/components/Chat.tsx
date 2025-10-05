@@ -12,15 +12,25 @@ interface Message {
 }
 
 interface ChatProps {
+  conversationId?: string;
   filesContext: string;
   onFileOperation?: (operation: string, fileName: string, content?: string) => void;
 }
 
-export const Chat = ({ filesContext, onFileOperation }: ChatProps) => {
+export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load conversation messages when conversationId changes
+  useEffect(() => {
+    if (conversationId) {
+      loadConversation(conversationId);
+    } else {
+      setMessages([]);
+    }
+  }, [conversationId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -28,8 +38,75 @@ export const Chat = ({ filesContext, onFileOperation }: ChatProps) => {
     }
   }, [messages]);
 
+  const loadConversation = async (convId: string) => {
+    try {
+      // @ts-ignore - Types will update after migration
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      setMessages((data || []).map((msg: any) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content
+      })));
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load conversation",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const saveMessage = async (convId: string, role: string, content: string) => {
+    try {
+      // @ts-ignore - Types will update after migration
+      const { error } = await supabase
+        .from('chat_messages')
+        .insert({
+          conversation_id: convId,
+          role,
+          content
+        } as any);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving message:', error);
+    }
+  };
+
+  const createConversation = async (firstMessage: string): Promise<string> => {
+    try {
+      // @ts-ignore - Types will update after migration
+      const { data, error } = await supabase
+        .from('conversations')
+        .insert({
+          title: firstMessage.slice(0, 50) + (firstMessage.length > 50 ? '...' : '')
+        } as any)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return (data as any).id;
+    } catch (error) {
+      console.error('Error creating conversation:', error);
+      throw error;
+    }
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
+
+    // Create conversation if needed
+    let activeConvId = conversationId;
+    if (!activeConvId) {
+      activeConvId = await createConversation(input);
+    }
 
     // Include file context in the message
     const contextualInput = `Current Files:\n${filesContext}\n\nUser Question: ${input}`;
@@ -37,6 +114,7 @@ export const Chat = ({ filesContext, onFileOperation }: ChatProps) => {
     const contextualMessage: Message = { role: 'user', content: contextualInput };
     
     setMessages(prev => [...prev, userMessage]);
+    await saveMessage(activeConvId, 'user', input);
     setInput('');
     setIsLoading(true);
 
@@ -103,6 +181,11 @@ export const Chat = ({ filesContext, onFileOperation }: ChatProps) => {
             }
           }
         }
+      }
+
+      // Save assistant message
+      if (activeConvId && assistantMessage) {
+        await saveMessage(activeConvId, 'assistant', assistantMessage);
       }
 
       // Process file operations from AI response
@@ -190,15 +273,36 @@ export const Chat = ({ filesContext, onFileOperation }: ChatProps) => {
               }`}
             >
               <div
-                className={`p-3 rounded-lg max-w-[85%] ${
+                className={`p-4 rounded-lg max-w-[85%] ${
                   msg.role === 'user'
                     ? 'bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/30 shadow-sm'
                     : 'bg-secondary/80 backdrop-blur-sm border border-border/50'
                 }`}
               >
-                <pre className="whitespace-pre-wrap font-mono text-sm text-foreground leading-relaxed">
-                  {msg.content}
-                </pre>
+                <div className="prose prose-sm max-w-none dark:prose-invert">
+                  <div className="whitespace-pre-wrap text-sm text-foreground leading-relaxed">
+                    {msg.content.split('\n').map((line, i) => {
+                      // Handle bullet points
+                      if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
+                        return (
+                          <div key={i} className="flex gap-2 my-1">
+                            <span className="text-primary">•</span>
+                            <span>{line.replace(/^[•\-]\s*/, '')}</span>
+                          </div>
+                        );
+                      }
+                      // Handle bold text
+                      if (line.includes('**')) {
+                        return (
+                          <p key={i} dangerouslySetInnerHTML={{
+                            __html: line.replace(/\*\*(.+?)\*\*/g, '<strong class="text-primary font-semibold">$1</strong>')
+                          }} />
+                        );
+                      }
+                      return line ? <p key={i}>{line}</p> : <br key={i} />;
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           ))}

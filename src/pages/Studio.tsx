@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { Chat } from '@/components/Chat';
 import { CodeEditor } from '@/components/CodeEditor';
 import { PreviewPane } from '@/components/PreviewPane';
-import { FileExplorer } from '@/components/FileExplorer';
+import { CollapsibleFileExplorer } from '@/components/CollapsibleFileExplorer';
+import { ChatHistory } from '@/components/ChatHistory';
 import { Code2, Sparkles, FileCode, Globe, MessageSquare } from 'lucide-react';
 import { useFileSystem } from '@/hooks/useFileSystem';
 import { toast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-const Index = () => {
+const Studio = () => {
+  const [currentConversationId, setCurrentConversationId] = useState<string>();
   const [output, setOutput] = useState<string[]>([]);
   const [previewHtml, setPreviewHtml] = useState('');
   
@@ -155,17 +157,22 @@ const Index = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
+        {/* Chat History Sidebar */}
+        <ChatHistory
+          currentConversationId={currentConversationId}
+          onSelectConversation={setCurrentConversationId}
+          onNewConversation={() => setCurrentConversationId(undefined)}
+        />
+
         {/* File Explorer */}
-        <div className="w-[250px] flex-shrink-0 border-r border-border/50">
-          <FileExplorer
-            files={files}
-            activeFileId={activeFileId}
-            onSelectFile={setActiveFileId}
-            onCreateFile={(name) => createFile(name)}
-            onDeleteFile={deleteFile}
-            onRenameFile={renameFile}
-          />
-        </div>
+        <CollapsibleFileExplorer
+          files={files}
+          activeFileId={activeFileId}
+          onSelectFile={setActiveFileId}
+          onCreateFile={(name) => createFile(name)}
+          onDeleteFile={deleteFile}
+          onRenameFile={renameFile}
+        />
 
         {/* Main Workspace with Tabs */}
         <div className="flex-1 flex flex-col">
@@ -202,6 +209,7 @@ const Index = () => {
 
             <TabsContent value="chat" className="flex-1 m-0">
               <Chat 
+                conversationId={currentConversationId}
                 filesContext={getAllFilesContext()}
                 onFileOperation={handleFileOperation}
               />
@@ -213,4 +221,4 @@ const Index = () => {
   );
 };
 
-export default Index;
+export default Studio;
