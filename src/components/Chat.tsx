@@ -15,9 +15,17 @@ interface ChatProps {
   conversationId?: string;
   filesContext: string;
   onFileOperation?: (operation: string, fileName: string, content?: string) => void;
+  onConversationCreated?: (conversationId: string) => void;
+  onNewChatRequested?: () => void;
 }
 
-export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProps) => {
+export const Chat = ({
+  conversationId,
+  filesContext,
+  onFileOperation,
+  onConversationCreated,
+  onNewChatRequested
+}: ChatProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -39,8 +47,8 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
   }, [messages]);
 
   const loadConversation = async (convId: string) => {
+    setIsLoading(true);
     try {
-      // @ts-ignore - Types will update after migration
       const { data, error } = await supabase
         .from('chat_messages')
         .select('*')
@@ -60,21 +68,28 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
         description: "Failed to load conversation",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const saveMessage = async (convId: string, role: string, content: string) => {
     try {
-      // @ts-ignore - Types will update after migration
       const { error } = await supabase
         .from('chat_messages')
         .insert({
           conversation_id: convId,
           role,
           content
-        } as any);
+        });
 
       if (error) throw error;
+
+      // Update conversation's updated_at timestamp
+      await supabase
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', convId);
     } catch (error) {
       console.error('Error saving message:', error);
     }
@@ -82,17 +97,16 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
 
   const createConversation = async (firstMessage: string): Promise<string> => {
     try {
-      // @ts-ignore - Types will update after migration
       const { data, error } = await supabase
         .from('conversations')
         .insert({
           title: firstMessage.slice(0, 50) + (firstMessage.length > 50 ? '...' : '')
-        } as any)
+        })
         .select()
         .single();
 
       if (error) throw error;
-      return (data as any).id;
+      return data.id;
     } catch (error) {
       console.error('Error creating conversation:', error);
       throw error;
@@ -105,14 +119,24 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
     // Create conversation if needed
     let activeConvId = conversationId;
     if (!activeConvId) {
-      activeConvId = await createConversation(input);
+      try {
+        activeConvId = await createConversation(input);
+        onConversationCreated?.(activeConvId);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to create conversation",
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
     // Include file context in the message
     const contextualInput = `Current Files:\n${filesContext}\n\nUser Question: ${input}`;
     const userMessage: Message = { role: 'user', content: input };
     const contextualMessage: Message = { role: 'user', content: contextualInput };
-    
+
     setMessages(prev => [...prev, userMessage]);
     await saveMessage(activeConvId, 'user', input);
     setInput('');
@@ -120,12 +144,12 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
 
     try {
       const response = await fetch(
-        `https://ixyoxqaeesvhfijqaawr.supabase.co/functions/v1/ai-chat`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
           },
           body: JSON.stringify({
             messages: [...messages.map(m => ({ role: m.role, content: m.content })), contextualMessage]
@@ -139,7 +163,7 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No response body');
-      
+
       const decoder = new TextDecoder();
       let assistantMessage = '';
       let buffer = '';
@@ -218,16 +242,7 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
   };
 
   const handleNewChat = () => {
-    if (messages.length > 0) {
-      const confirmNew = window.confirm('Start a new chat? Current conversation will be cleared.');
-      if (!confirmNew) return;
-    }
-    setMessages([]);
-    setInput('');
-    toast({
-      title: "New Chat Started",
-      description: "Ready for a fresh conversation!",
-    });
+    onNewChatRequested?.();
   };
 
   return (
@@ -282,7 +297,6 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
                 <div className="prose prose-sm max-w-none dark:prose-invert">
                   <div className="whitespace-pre-wrap text-sm text-foreground leading-relaxed">
                     {msg.content.split('\n').map((line, i) => {
-                      // Handle bullet points
                       if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
                         return (
                           <div key={i} className="flex gap-2 my-1">
@@ -291,7 +305,6 @@ export const Chat = ({ conversationId, filesContext, onFileOperation }: ChatProp
                           </div>
                         );
                       }
-                      // Handle bold text
                       if (line.includes('**')) {
                         return (
                           <p key={i} dangerouslySetInnerHTML={{

@@ -13,7 +13,7 @@ const Studio = () => {
   const [currentConversationId, setCurrentConversationId] = useState<string>();
   const [output, setOutput] = useState<string[]>([]);
   const [previewHtml, setPreviewHtml] = useState('');
-  
+
   const {
     files,
     activeFileId,
@@ -23,8 +23,9 @@ const Studio = () => {
     deleteFile,
     renameFile,
     getActiveFile,
-    getAllFilesContext
-  } = useFileSystem();
+    getAllFilesContext,
+    isLoading: filesLoading
+  } = useFileSystem(currentConversationId);
 
   // Auto-run and generate preview whenever files change
   useEffect(() => {
@@ -34,13 +35,13 @@ const Studio = () => {
 
     if (htmlFile) {
       let html = htmlFile.content;
-      
+
       // Inject CSS
       if (cssFiles.length > 0) {
         const cssContent = cssFiles.map(f => f.content).join('\n');
         html = html.replace('</head>', `<style>${cssContent}</style></head>`);
       }
-      
+
       // Inject JS with console capture
       if (jsFiles.length > 0) {
         const jsContent = jsFiles.map(f => f.content).join('\n');
@@ -49,13 +50,13 @@ const Studio = () => {
             const logs = [];
             const originalLog = console.log;
             console.log = (...args) => {
-              logs.push(args.map(arg => 
+              logs.push(args.map(arg =>
                 typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
               ).join(' '));
               originalLog(...args);
               window.parent.postMessage({ type: 'console', logs }, '*');
             };
-            
+
             try {
               ${jsContent}
             } catch (error) {
@@ -65,14 +66,14 @@ const Studio = () => {
         `;
         html = html.replace('</body>', `${wrappedJs}</body>`);
       }
-      
+
       setPreviewHtml(html);
     } else if (jsFiles.length > 0) {
       // Run pure JS files
       const logs: string[] = [];
       const originalLog = console.log;
       console.log = (...args: any[]) => {
-        logs.push(args.map(arg => 
+        logs.push(args.map(arg =>
           typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
         ).join(' '));
         originalLog(...args);
@@ -84,7 +85,7 @@ const Studio = () => {
       } catch (error: any) {
         setOutput([`Error: ${error.message}`]);
       }
-      
+
       console.log = originalLog;
     }
   }, [files]);
@@ -134,6 +135,26 @@ const Studio = () => {
     }
   };
 
+  const handleConversationCreated = (conversationId: string) => {
+    setCurrentConversationId(conversationId);
+    toast({
+      title: "New Chat Started",
+      description: "Your conversation has been created",
+    });
+  };
+
+  const handleNewConversation = () => {
+    setCurrentConversationId(undefined);
+    toast({
+      title: "Ready for New Chat",
+      description: "Start fresh with a new conversation",
+    });
+  };
+
+  const handleSelectConversation = (conversationId: string) => {
+    setCurrentConversationId(conversationId);
+  };
+
   const activeFile = getActiveFile();
 
   return (
@@ -160,8 +181,8 @@ const Studio = () => {
         {/* Chat History Sidebar */}
         <ChatHistory
           currentConversationId={currentConversationId}
-          onSelectConversation={setCurrentConversationId}
-          onNewConversation={() => setCurrentConversationId(undefined)}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
         />
 
         {/* File Explorer */}
@@ -193,14 +214,23 @@ const Studio = () => {
             </TabsList>
 
             <TabsContent value="editor" className="flex-1 m-0">
-              <CodeEditor 
-                file={activeFile}
-                onUpdateFile={(content) => {
-                  if (activeFile) {
-                    updateFile(activeFile.id, { content });
-                  }
-                }}
-              />
+              {filesLoading ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="text-center">
+                    <Sparkles className="w-12 h-12 mx-auto mb-4 animate-pulse text-primary" />
+                    <p>Loading files...</p>
+                  </div>
+                </div>
+              ) : (
+                <CodeEditor
+                  file={activeFile}
+                  onUpdateFile={(content) => {
+                    if (activeFile) {
+                      updateFile(activeFile.id, { content });
+                    }
+                  }}
+                />
+              )}
             </TabsContent>
 
             <TabsContent value="preview" className="flex-1 m-0">
@@ -208,10 +238,12 @@ const Studio = () => {
             </TabsContent>
 
             <TabsContent value="chat" className="flex-1 m-0">
-              <Chat 
+              <Chat
                 conversationId={currentConversationId}
                 filesContext={getAllFilesContext()}
                 onFileOperation={handleFileOperation}
+                onConversationCreated={handleConversationCreated}
+                onNewChatRequested={handleNewConversation}
               />
             </TabsContent>
           </Tabs>
